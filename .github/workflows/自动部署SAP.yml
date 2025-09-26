@@ -1,7 +1,12 @@
 name: 自动部署 SAP
 
 on:
-  workflow_dispatch:  # 只允许手动触发
+  schedule:
+    # 每天7点25分自动运行 (UTC时间23:25，北京时间7:25)
+    - cron: '25 23 * * *'
+    # 每天8点25分自动运行 (UTC时间0:25，北京时间8:25)
+    - cron: '25 0 * * *'
+  workflow_dispatch:  # 允许手动触发
     inputs:
       type:
         description: '选择部署的节点类型'
@@ -59,7 +64,7 @@ on:
         default: ''
 
 env:
-  MEMORY: 256M
+  MEMORY: 512M
 
 jobs:
   deploy-app:
@@ -81,7 +86,7 @@ jobs:
         # 设置API端点和生成随机字符串
         RANDOM_STR=$(head /dev/urandom | tr -dc 'a-z' | head -c 6)
         
-        case "${{ github.event.inputs.region }}" in
+        case "${{ github.event.inputs.region || 'US(free)' }}" in
           # 免费区域
           "SG(free)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
@@ -221,9 +226,9 @@ jobs:
         if [[ -n "${{ secrets.DOCKER_IMAGE }}" ]]; then
           echo "DOCKER_IMAGE=${{ secrets.DOCKER_IMAGE }}" >> $GITHUB_ENV
         else
-          if [ "${{ github.event.inputs.type }}" = "ws直连" ]; then
+          if [ "${{ github.event.inputs.type || 'Argo隧道CDN' }}" = "ws直连" ]; then
             echo "DOCKER_IMAGE=ghcr.io/eooce/ws:latest" >> $GITHUB_ENV
-          elif [ "${{ github.event.inputs.type }}" = "xhttp直连" ]; then
+          elif [ "${{ github.event.inputs.type || 'Argo隧道CDN' }}" = "xhttp直连" ]; then
             echo "DOCKER_IMAGE=ghcr.io/eooce/goxhttp:latest" >> $GITHUB_ENV
           else 
             echo "DOCKER_IMAGE=ghcr.io/eooce/nodejs:main" >> $GITHUB_ENV
@@ -265,17 +270,29 @@ jobs:
       run: |
         # 基础环境变量
         cf set-env ${{ env.APP_NAME }} NAME "SAP"
-        cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY }}"
-        cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN }}"
-        cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH }}"
-        cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH }}"
+        # 生成随机UUID
+        if [ -n "${{ secrets.UUID }}" ]; then
+          echo "使用自定义UUID: ${{ secrets.UUID }}"
+          cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
+        else
+          # 生成随机UUID
+          RANDOM_UUID=$(python3 -c "import uuid; print(str(uuid.uuid4()))")
+          echo "生成随机UUID: $RANDOM_UUID"
+          cf set-env ${{ env.APP_NAME }} UUID "$RANDOM_UUID"
+        fi
+        cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER || 'agent.ylm52.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT || '80' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY || 'I9Vxqc2g2rfY4Qqcv5guQ5B8vVHncTsh' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_TLS "${{ secrets.NEZHA_TLS || 'false' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN || 'us-sap.daili123.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH || 'eyJhIjoiYWViZTE2OGY2YmM2NmFhZThmMDcwNjY2ZWVkYmJiZDIiLCJ0IjoiOGYwNzFmMGEtMWRkYS00MzQ4LWFhZGMtYjQxM2JkMjdiYzUwIiwicyI6IlptRmtZMlpoWVRNdE9UUmtPUzAwTURrMUxUZzBPVEV0TURZeU9UTTFPRFl6TmpFeSJ9' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_TUNNEL_ID "${{ secrets.ARGO_TUNNEL_ID || '8f071f0a-1dda-4348-aadc-b413bd27bc50' }}"
+        cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH || '' }}"
         cf set-env ${{ env.APP_NAME }} CFIP "${{ secrets.CFIP || 'cf.877774.xyz' }}"
-        cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT }}"
-        cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID }}"
-        cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN }}"
+        cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT || '' }}"
+        # Telegram通知相关环境变量（已禁用）
+        # cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID }}"
+        # cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN }}"
 
         # 可选：从文件读取环境变量(如果存在)
         if [ -f .env ]; then
@@ -311,7 +328,7 @@ jobs:
     - name: 详细部署信息
       run: |
         echo "🚀 部署完成！详细信息如下："
-        echo "区域(Region): ${{ github.event.inputs.region }}"
+        echo "区域(Region): ${{ github.event.inputs.region || 'US(free)' }}"
         echo "组织(ORG): ${{ env.ORG }}"
         echo "空间(SPACE): ${{ env.SPACE }}"
         echo "应用名称(App Name): ${{ env.APP_NAME }}"
