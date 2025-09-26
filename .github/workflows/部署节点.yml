@@ -1,0 +1,421 @@
+name: 手动部署SAP节点
+
+on:
+  workflow_dispatch:  # 只保留手动触发选项
+    inputs:
+      type:
+        description: '选择部署的节点类型'
+        required: true
+        default: 'Argo隧道CDN'
+        type: choice
+        options:
+          - ws直连
+          - xhttp直连
+          - Argo隧道CDN
+      app_name:
+        description: '应用名称（使用已抢到的容器名称）'
+        required: true
+        default: 'free-usfheata'
+      wait_for_resources:
+        description: '是否等待资源可用（建议在非8:20-9:00时间段选择）'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  MEMORY: 512M
+
+jobs:
+  deploy-app:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install CF CLI
+      run: |
+        wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
+        echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
+        sudo apt-get update
+        sudo apt-get install -y cf8-cli
+
+    - name: 设置部署参数
+      run: |
+        # 使用已抢到的容器名称
+        echo "APP_NAME=${{ github.event.inputs.app_name }}" >> $GITHUB_ENV
+        
+        # 根据容器名称判断区域和API端点
+        if [[ "${{ github.event.inputs.app_name }}" =~ ^free-us ]]; then
+          echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
+          echo "检测到US免费区域容器"
+        elif [[ "${{ github.event.inputs.app_name }}" =~ ^free-sg ]]; then
+            echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
+          echo "检测到SG免费区域容器"
+        else
+            echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
+          echo "使用默认US区域API端点"
+        fi
+        
+        # 设置部署类型
+        TYPE="${{ github.event.inputs.type }}"
+        if [[ -n "${{ secrets.DOCKER_IMAGE }}" ]]; then
+          echo "DOCKER_IMAGE=${{ secrets.DOCKER_IMAGE }}" >> $GITHUB_ENV
+        else
+          if [ "$TYPE" = "ws直连" ]; then
+            echo "DOCKER_IMAGE=ghcr.io/eooce/ws:latest" >> $GITHUB_ENV
+          elif [ "$TYPE" = "xhttp直连" ]; then
+            echo "DOCKER_IMAGE=ghcr.io/eooce/goxhttp:latest" >> $GITHUB_ENV
+          else 
+            echo "DOCKER_IMAGE=ghcr.io/eooce/nodejs:main" >> $GITHUB_ENV
+          fi
+        fi
+        
+        echo "🚀 部署配置:"
+        echo "  - API端点: $CF_API"
+        echo "  - 应用名称: $APP_NAME"
+        echo "  - 部署类型: $TYPE"
+        echo "  - Docker镜像: ${{ env.DOCKER_IMAGE }}"
+
+    - name: Login to Cloud Foundry
+      run: |
+        cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}"
+
+        # 获取组织列表
+        ORG=$(cf orgs | sed -n '4p')
+        echo "Selected org: $ORG"
+        echo "ORG=$ORG" >> $GITHUB_ENV
+
+        # 获取空间列表
+        SPACE=$(cf spaces | sed -n '4p')
+        echo "Selected space: $SPACE"
+        echo "SPACE=$SPACE" >> $GITHUB_ENV
+
+        # 使用获取的组织和空间重新登录
+        cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}" -o "$ORG" -s "$SPACE"
+
+        # 检查组织内存限制
+        echo "🔍 检查组织内存限制..."
+        cf org $ORG
+        echo "📊 当前空间内存使用情况:"
+        cf space $SPACE
+        
+        # 检查当前应用状态
+        echo "📋 检查当前应用状态:"
+        if cf app ${{ env.APP_NAME }} >/dev/null 2>&1; then
+          echo "✅ 应用 ${{ env.APP_NAME }} 存在"
+          cf app ${{ env.APP_NAME }}
+        else
+          echo "⚠️ 应用 ${{ env.APP_NAME }} 不存在或未运行"
+        fi
+
+    - name: 发送部署开始通知
+      run: |
+        echo "📱 发送部署开始通知到Telegram..."
+        START_MESSAGE="🚀 SAP节点部署开始
+
+📋 部署信息：
+• 容器名称: ${{ env.APP_NAME }}
+• 部署类型: ${{ github.event.inputs.type }}
+• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')
+• 组织: ${{ env.ORG }}
+• 空间: ${{ env.SPACE }}
+
+⏰ 当前时间: $(date +"%H:%M")
+📅 资源释放时间段: 8:20-9:00
+
+🔧 部署状态：进行中..."
+
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}/sendMessage" \
+          -d "chat_id=${{ secrets.CHAT_ID || '2117746804' }}" \
+          -d "text=$START_MESSAGE" \
+          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+
+    - name: 检查资源可用性
+      run: |
+        echo "🔍 检查SAP平台资源可用性..."
+        
+        # 检查当前时间
+        CURRENT_TIME=$(date +"%H:%M")
+        echo "⏰ 当前时间: $CURRENT_TIME"
+        
+        # 检查是否在资源释放时间段（8:20-9:00）
+        if [[ "$CURRENT_TIME" > "08:20" && "$CURRENT_TIME" < "09:00" ]]; then
+          echo "✅ 当前在资源释放时间段（8:20-9:00），资源应该可用"
+        else
+          echo "⚠️ 当前不在资源释放时间段，可能需要等待资源"
+        fi
+        
+        # 检查组织资源配额
+        echo "📊 检查组织资源配额..."
+        cf org ${{ env.ORG }} | grep -E "(memory|disk|instances)"
+        
+        # 检查空间资源使用情况
+        echo "📊 检查空间资源使用情况..."
+        cf space-usage ${{ env.SPACE }}
+
+    - name: 部署节点到容器
+      run: |
+        echo "🚀 开始部署节点到容器: ${{ env.APP_NAME }}"
+        
+        # 检查容器是否存在
+        if cf app ${{ env.APP_NAME }} >/dev/null 2>&1; then
+          echo "✅ 容器 ${{ env.APP_NAME }} 存在，开始部署节点..."
+          
+          # 先停止应用以释放资源
+          echo "🔄 停止现有应用以释放资源..."
+          cf stop ${{ env.APP_NAME }} || echo "应用已停止或不存在"
+          
+          # 等待一下确保资源释放
+          sleep 10
+          
+          # 检查是否等待资源
+          WAIT_FOR_RESOURCES="${{ github.event.inputs.wait_for_resources || 'false' }}"
+          
+          if [ "$WAIT_FOR_RESOURCES" = "true" ]; then
+            echo "⏳ 等待资源可用..."
+            MAX_ATTEMPTS=30
+            ATTEMPT=1
+            
+            # 发送等待开始通知
+            WAIT_START_MESSAGE="⏳ SAP节点部署等待资源中...
+
+📋 等待信息：
+• 容器名称: ${{ env.APP_NAME }}
+• 最大尝试次数: $MAX_ATTEMPTS
+• 每次间隔: 60秒
+• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')
+
+💡 说明：正在等待SAP平台资源释放..."
+            
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}/sendMessage" \
+              -d "chat_id=${{ secrets.CHAT_ID || '2117746804' }}" \
+              -d "text=$WAIT_START_MESSAGE" \
+              -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+            
+            while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+              echo "🔄 尝试部署 (第 $ATTEMPT/$MAX_ATTEMPTS 次)..."
+              
+              if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
+                echo "🎉 部署成功！节点部署完成"
+                exit 0
+              fi
+              
+              echo "⏳ 资源不足，等待60秒后重试..."
+              
+              # 每5次尝试发送一次进度通知
+              if [ $((ATTEMPT % 5)) -eq 0 ]; then
+                PROGRESS_MESSAGE="🔄 SAP节点部署进度更新
+
+📊 当前进度：
+• 尝试次数: $ATTEMPT/$MAX_ATTEMPTS
+• 剩余尝试: $((MAX_ATTEMPTS - ATTEMPT))
+• 当前时间: $(date '+%Y-%m-%d %H:%M:%S')
+
+⏳ 状态：继续等待资源释放..."
+                
+                curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}/sendMessage" \
+                  -d "chat_id=${{ secrets.CHAT_ID || '2117746804' }}" \
+                  -d "text=$PROGRESS_MESSAGE" \
+                  -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+              fi
+              
+              sleep 60
+              ATTEMPT=$((ATTEMPT + 1))
+            done
+            
+            echo "❌ 等待超时，所有尝试都失败了"
+            exit 1
+          else
+            # 直接尝试部署
+            echo "🔧 尝试部署节点..."
+            
+            if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
+              echo "🎉 部署成功！节点部署完成"
+              exit 0
+            else
+              echo "❌ 部署失败：资源不足"
+              echo "💡 建议："
+              echo "  1. 等待明天早上8:20-9:00资源释放时间段"
+              echo "  2. 或者选择'等待资源可用'选项重新运行"
+              echo "  3. 检查是否有其他应用占用资源"
+              exit 1
+            fi
+          fi
+        else
+          echo "❌ 容器 ${{ env.APP_NAME }} 不存在，请检查容器名称"
+          exit 1
+        fi
+        
+    - name: Set environment variables
+      run: |
+        # 基础环境变量
+        cf set-env ${{ env.APP_NAME }} NAME "SAP"
+        # 生成随机UUID
+        if [ -n "${{ secrets.UUID }}" ]; then
+          echo "使用自定义UUID: ${{ secrets.UUID }}"
+          cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
+        else
+          # 生成随机UUID
+          RANDOM_UUID=$(python3 -c "import uuid; print(str(uuid.uuid4()))")
+          echo "生成随机UUID: $RANDOM_UUID"
+          cf set-env ${{ env.APP_NAME }} UUID "$RANDOM_UUID"
+        fi
+        cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER || 'agent.ylm52.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT || '80' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY || 'I9Vxqc2g2rfY4Qqcv5guQ5B8vVHncTsh' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_TLS "${{ secrets.NEZHA_TLS || 'false' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN || 'us-sap.daili123.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH || 'eyJhIjoiYWViZTE2OGY2YmM2NmFhZThmMDcwNjY2ZWVkYmJiZDIiLCJ0IjoiOGYwNzFmMGEtMWRkYS00MzQ4LWFhZGMtYjQxM2JkMjdiYzUwIiwicyI6IlptRmtZMlpoWVRNdE9UUmtPUzAwTURrMUxUZzBPVEV0TURZeU9UTTFPRFl6TmpFeSJ9' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_TUNNEL_ID "${{ secrets.ARGO_TUNNEL_ID || '8f071f0a-1dda-4348-aadc-b413bd27bc50' }}"
+        cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH || '' }}"
+        cf set-env ${{ env.APP_NAME }} CFIP "${{ secrets.CFIP || 'cf.877774.xyz' }}"
+        cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT || '' }}"
+        cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID || '2117746804' }}"
+        cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}"
+
+        # 可选：从文件读取环境变量(如果存在)
+        if [ -f .env ]; then
+          while IFS= read -r line; do
+            if [[ ! "$line" =~ ^# ]] && [[ -n "$line" ]]; then
+              IFS='=' read -r key value <<< "$line"
+              cf set-env ${{ env.APP_NAME }} "$key" "$value"
+            fi
+          done < .env
+        fi
+
+        # 如果 DOCKER_IMAGE 中包含 xhttp、goxhttp、ws 等关键词说明为直连镜像
+        if [[ "${{ env.DOCKER_IMAGE }}" =~ (xhttp|goxhttp|ws) ]]; then
+          # 获取应用路由
+          ROUTE=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
+          if [ -n "$ROUTE" ]; then
+            echo "设置 DOMAIN 环境变量为: $ROUTE"
+            cf set-env ${{ env.APP_NAME }} DOMAIN "$ROUTE"
+          else
+            echo "⚠️ 未找到应用路由，无法设置 DOMAIN,请手动将节点里的address、host和sni改为应用域名"
+          fi
+        fi
+        
+        echo "✅ 环境变量设置完成"
+        
+    - name: Restage application
+      run: |
+        cf restage ${{ env.APP_NAME }}
+
+    - name: Verify deployment
+      run: |
+        cf app ${{ env.APP_NAME }}
+        echo "Deployment completed successfully!"
+
+    - name: 部署失败处理
+      if: failure()
+      run: |
+        echo "❌ 部署失败！"
+        echo "📋 失败原因分析："
+        echo "  - 可能原因：SAP平台资源不足"
+        echo "  - 解决方案：等待明天早上8:20-9:00资源释放时间段"
+        echo "  - 或者选择'等待资源可用'选项重新运行"
+        echo ""
+        echo "⏰ 当前时间: $(date)"
+        echo "📅 下次资源释放时间：明天早上8:20-9:00"
+        echo "💡 建议：设置定时任务在8:25自动运行"
+        
+        # 发送失败通知到Telegram
+        echo "📱 发送失败通知到Telegram..."
+        FAILURE_MESSAGE="❌ SAP节点部署失败
+
+📋 失败信息：
+• 容器名称: ${{ env.APP_NAME }}
+• 部署类型: ${{ github.event.inputs.type }}
+• 失败时间: $(date '+%Y-%m-%d %H:%M:%S')
+
+🔍 失败原因：
+• SAP平台资源不足
+• 建议等待明天早上8:20-9:00资源释放时间段
+
+💡 解决方案：
+• 等待资源释放时间段重新部署
+• 或选择'等待资源可用'选项
+
+📅 下次资源释放时间：明天早上8:20-9:00"
+
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}/sendMessage" \
+          -d "chat_id=${{ secrets.CHAT_ID || '2117746804' }}" \
+          -d "text=$FAILURE_MESSAGE" \
+          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+
+    - name: 部署完成信息
+      if: success()
+      run: |
+        echo "🎉 节点部署完成！详细信息如下："
+        echo "容器名称: ${{ env.APP_NAME }}"
+        echo "部署类型: ${{ github.event.inputs.type }}"
+        echo "组织(ORG): ${{ env.ORG }}"
+        echo "空间(SPACE): ${{ env.SPACE }}"
+
+        # 获取应用路由
+        ROUTE=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
+        if [ -n "$ROUTE" ]; then
+          echo "🌐 节点访问地址: https://$ROUTE"
+          echo ""
+          echo "📋 节点配置信息："
+          echo "  - 地址(Address): $ROUTE"
+          echo "  - 端口(Port): 443"
+          echo "  - 传输协议(Transport): tls"
+          echo "  - 网络(Network): ws 或 tcp"
+          echo "  - 路径(Path): /"
+          echo "  - 主机名(Host): $ROUTE"
+          echo "  - SNI: $ROUTE"
+          echo ""
+          echo "💡 使用说明："
+          echo "  1. 将此地址添加到你的代理客户端配置中"
+          echo "  2. 选择对应的传输协议和网络类型"
+          echo "  3. 确保TLS/SSL设置正确"
+          echo "  4. 测试连接是否正常"
+        else
+          echo "⚠️ 未找到应用路由，请检查部署状态。"
+        fi
+        
+        echo ""
+        echo "✅ 节点部署成功！现在可以使用此节点进行网络代理。"
+        echo "🔧 如需修改配置，请重新运行此工作流。"
+        echo ""
+        echo "📅 下次资源释放时间：明天早上8:20-9:00"
+        echo "⏰ 建议在此时间段进行部署以获得最佳成功率"
+        
+        # 发送成功通知到Telegram
+        echo "📱 发送成功通知到Telegram..."
+        SUCCESS_MESSAGE="🎉 SAP节点部署成功！
+
+📋 部署信息：
+• 容器名称: ${{ env.APP_NAME }}
+• 部署类型: ${{ github.event.inputs.type }}
+• 部署时间: $(date '+%Y-%m-%d %H:%M:%S')
+• 组织: ${{ env.ORG }}
+• 空间: ${{ env.SPACE }}
+
+🌐 节点配置：
+• 地址: $ROUTE
+• 端口: 443
+• 传输协议: tls
+• 网络: ws 或 tcp
+• 路径: /
+• 主机名: $ROUTE
+• SNI: $ROUTE
+
+💡 使用说明：
+• 将此地址添加到代理客户端配置中
+• 选择对应的传输协议和网络类型
+• 确保TLS/SSL设置正确
+• 测试连接是否正常
+
+✅ 节点部署成功！现在可以使用此节点进行网络代理。
+📅 下次资源释放时间：明天早上8:20-9:00"
+
+        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN || '5319733154:AAHQJjFwP42Vo87hgdQI5cyvAoaNw3toK2M' }}/sendMessage" \
+          -d "chat_id=${{ secrets.CHAT_ID || '2117746804' }}" \
+          -d "text=$SUCCESS_MESSAGE" \
+          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
