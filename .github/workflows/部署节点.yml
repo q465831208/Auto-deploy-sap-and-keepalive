@@ -139,28 +139,12 @@ jobs:
         echo "📅 资源释放时间段: 8:20-9:00"
         echo "🔧 部署状态：进行中..."
 
-    - name: 检查资源可用性
+    - name: 直接部署
       run: |
-        echo "🔍 检查SAP平台资源可用性..."
-        
-        # 检查当前时间
-        CURRENT_TIME=$(date +"%H:%M")
-        echo "⏰ 当前时间: $CURRENT_TIME"
-        
-        # 检查是否在资源释放时间段（8:20-9:00）
-        if [[ "$CURRENT_TIME" > "08:20" && "$CURRENT_TIME" < "09:00" ]]; then
-          echo "✅ 当前在资源释放时间段（8:20-9:00），资源应该可用"
-        else
-          echo "⚠️ 当前不在资源释放时间段，可能需要等待资源"
-        fi
-        
-        # 检查组织资源配额
-        echo "📊 检查组织资源配额..."
-        cf org ${{ env.ORG }} | grep -E "(memory|disk|instances)"
-        
-        # 检查空间资源使用情况
-        echo "📊 检查空间资源使用情况..."
-        cf space-usage ${{ env.SPACE }}
+        echo "🚀 手动部署触发，直接开始部署..."
+        echo "⏰ 当前时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "📅 资源释放时间段: 8:20-9:00"
+        echo "💡 手动部署将直接尝试部署，不检查资源可用性"
 
     - name: 部署节点到容器
       run: |
@@ -177,64 +161,18 @@ jobs:
           # 等待一下确保资源释放
           sleep 10
           
-          # 检查是否等待资源
-          WAIT_FOR_RESOURCES="${{ github.event.inputs.wait_for_resources || 'false' }}"
+          # 直接尝试部署，不等待资源
+          echo "🔧 尝试部署节点..."
           
-          if [ "$WAIT_FOR_RESOURCES" = "true" ]; then
-            echo "⏳ 等待资源可用..."
-            MAX_ATTEMPTS=30
-            ATTEMPT=1
-            
-            # 记录等待开始信息
-            echo "⏳ SAP节点部署等待资源中..."
-            echo "📋 等待信息："
-            echo "• 容器名称: ${{ env.APP_NAME }}"
-            echo "• 最大尝试次数: $MAX_ATTEMPTS"
-            echo "• 每次间隔: 60秒"
-            echo "• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
-            echo "💡 说明：正在等待SAP平台资源释放..."
-            
-            while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-              echo "🔄 尝试部署 (第 $ATTEMPT/$MAX_ATTEMPTS 次)..."
-              
-              if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
-                echo "🎉 部署成功！节点部署完成"
-                exit 0
-              fi
-              
-              echo "⏳ 资源不足，等待60秒后重试..."
-              
-              # 每5次尝试记录一次进度
-              if [ $((ATTEMPT % 5)) -eq 0 ]; then
-                echo "🔄 SAP节点部署进度更新"
-                echo "📊 当前进度："
-                echo "• 尝试次数: $ATTEMPT/$MAX_ATTEMPTS"
-                echo "• 剩余尝试: $((MAX_ATTEMPTS - ATTEMPT))"
-                echo "• 当前时间: $(date '+%Y-%m-%d %H:%M:%S')"
-                echo "⏳ 状态：继续等待资源释放..."
-              fi
-              
-              sleep 60
-              ATTEMPT=$((ATTEMPT + 1))
-            done
-            
-            echo "❌ 等待超时，所有尝试都失败了"
-            exit 1
+          if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
+            echo "🎉 部署成功！节点部署完成"
+            exit 0
           else
-            # 直接尝试部署
-            echo "🔧 尝试部署节点..."
-            
-            if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
-              echo "🎉 部署成功！节点部署完成"
-              exit 0
-            else
-              echo "❌ 部署失败：资源不足"
-              echo "💡 建议："
-              echo "  1. 等待明天早上8:20-9:00资源释放时间段"
-              echo "  2. 或者选择'等待资源可用'选项重新运行"
-              echo "  3. 检查是否有其他应用占用资源"
-              exit 1
-            fi
+            echo "❌ 部署失败：资源不足"
+            echo "💡 建议："
+            echo "  1. 等待明天早上8:20-9:00资源释放时间段"
+            echo "  2. 检查是否有其他应用占用资源"
+            exit 1
           fi
         else
           echo "❌ 容器 ${{ env.APP_NAME }} 不存在，请检查容器名称"
