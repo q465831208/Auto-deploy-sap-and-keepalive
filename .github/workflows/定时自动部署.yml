@@ -129,27 +129,18 @@ jobs:
           echo "⚠️ 应用 ${{ env.APP_NAME }} 不存在或未运行"
         fi
 
-    - name: 发送部署开始通知
+    - name: 部署开始日志
       run: |
-        echo "📱 发送部署开始通知到Telegram..."
-        START_MESSAGE="🚀 SAP节点部署开始
-
-📋 部署信息：
-• 容器名称: ${{ env.APP_NAME }}
-• 部署类型: ${{ github.event.inputs.type }}
-• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')
-• 组织: ${{ env.ORG }}
-• 空间: ${{ env.SPACE }}
-
-⏰ 当前时间: $(date +"%H:%M")
-📅 资源释放时间段: 8:20-9:00
-
-🔧 部署状态：进行中..."
-
-        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-          -d "chat_id=${{ secrets.CHAT_ID }}" \
-          -d "text=$START_MESSAGE" \
-          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+        echo "🚀 SAP节点部署开始"
+        echo "📋 部署信息："
+        echo "• 容器名称: ${{ env.APP_NAME }}"
+        echo "• 部署类型: ${{ github.event.inputs.type }}"
+        echo "• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "• 组织: ${{ env.ORG }}"
+        echo "• 空间: ${{ env.SPACE }}"
+        echo "⏰ 当前时间: $(date +"%H:%M")"
+        echo "📅 资源释放时间段: 8:20-9:00"
+        echo "🔧 部署状态：进行中..."
 
     - name: 检查资源可用性
       run: |
@@ -197,21 +188,14 @@ jobs:
             MAX_ATTEMPTS=30
             ATTEMPT=1
             
-            # 发送等待开始通知
-            WAIT_START_MESSAGE="⏳ SAP节点部署等待资源中...
-
-📋 等待信息：
-• 容器名称: ${{ env.APP_NAME }}
-• 最大尝试次数: $MAX_ATTEMPTS
-• 每次间隔: 60秒
-• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')
-
-💡 说明：正在等待SAP平台资源释放..."
-            
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.CHAT_ID }}" \
-              -d "text=$WAIT_START_MESSAGE" \
-              -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+            # 记录等待开始信息
+            echo "⏳ SAP节点部署等待资源中..."
+            echo "📋 等待信息："
+            echo "• 容器名称: ${{ env.APP_NAME }}"
+            echo "• 最大尝试次数: $MAX_ATTEMPTS"
+            echo "• 每次间隔: 60秒"
+            echo "• 开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "💡 说明：正在等待SAP平台资源释放..."
             
             while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
               echo "🔄 尝试部署 (第 $ATTEMPT/$MAX_ATTEMPTS 次)..."
@@ -223,21 +207,14 @@ jobs:
               
               echo "⏳ 资源不足，等待60秒后重试..."
               
-              # 每5次尝试发送一次进度通知
+              # 每5次尝试记录一次进度
               if [ $((ATTEMPT % 5)) -eq 0 ]; then
-                PROGRESS_MESSAGE="🔄 SAP节点部署进度更新
-
-📊 当前进度：
-• 尝试次数: $ATTEMPT/$MAX_ATTEMPTS
-• 剩余尝试: $((MAX_ATTEMPTS - ATTEMPT))
-• 当前时间: $(date '+%Y-%m-%d %H:%M:%S')
-
-⏳ 状态：继续等待资源释放..."
-                
-                curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-                  -d "chat_id=${{ secrets.CHAT_ID }}" \
-                  -d "text=$PROGRESS_MESSAGE" \
-                  -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+                echo "🔄 SAP节点部署进度更新"
+                echo "📊 当前进度："
+                echo "• 尝试次数: $ATTEMPT/$MAX_ATTEMPTS"
+                echo "• 剩余尝试: $((MAX_ATTEMPTS - ATTEMPT))"
+                echo "• 当前时间: $(date '+%Y-%m-%d %H:%M:%S')"
+                echo "⏳ 状态：继续等待资源释放..."
               fi
               
               sleep 60
@@ -291,8 +268,9 @@ jobs:
         cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH || '' }}"
         cf set-env ${{ env.APP_NAME }} CFIP "${{ secrets.CFIP || 'cf.877774.xyz' }}"
         cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT || '' }}"
-        cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID }}"
-        cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN }}"
+        # Telegram通知相关环境变量（已禁用）
+        # cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID }}"
+        # cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN }}"
 
         # 可选：从文件读取环境变量(如果存在)
         if [ -f .env ]; then
@@ -340,29 +318,19 @@ jobs:
         echo "📅 下次资源释放时间：明天早上8:20-9:00"
         echo "💡 建议：设置定时任务在8:25自动运行"
         
-        # 发送失败通知到Telegram
-        echo "📱 发送失败通知到Telegram..."
-        FAILURE_MESSAGE="❌ SAP节点部署失败
-
-📋 失败信息：
-• 容器名称: ${{ env.APP_NAME }}
-• 部署类型: ${{ github.event.inputs.type }}
-• 失败时间: $(date '+%Y-%m-%d %H:%M:%S')
-
-🔍 失败原因：
-• SAP平台资源不足
-• 建议等待明天早上8:20-9:00资源释放时间段
-
-💡 解决方案：
-• 等待资源释放时间段重新部署
-• 或选择'等待资源可用'选项
-
-📅 下次资源释放时间：明天早上8:20-9:00"
-
-        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-          -d "chat_id=${{ secrets.CHAT_ID }}" \
-          -d "text=$FAILURE_MESSAGE" \
-          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+        # 记录失败信息
+        echo "❌ SAP节点部署失败"
+        echo "📋 失败信息："
+        echo "• 容器名称: ${{ env.APP_NAME }}"
+        echo "• 部署类型: ${{ github.event.inputs.type }}"
+        echo "• 失败时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "🔍 失败原因："
+        echo "• SAP平台资源不足"
+        echo "• 建议等待明天早上8:20-9:00资源释放时间段"
+        echo "💡 解决方案："
+        echo "• 等待资源释放时间段重新部署"
+        echo "• 或选择'等待资源可用'选项"
+        echo "📅 下次资源释放时间：明天早上8:20-9:00"
 
     - name: 部署完成信息
       if: success()
@@ -403,36 +371,26 @@ jobs:
         echo "📅 下次资源释放时间：明天早上8:20-9:00"
         echo "⏰ 建议在此时间段进行部署以获得最佳成功率"
         
-        # 发送成功通知到Telegram
-        echo "📱 发送成功通知到Telegram..."
-        SUCCESS_MESSAGE="🎉 SAP节点部署成功！
-
-📋 部署信息：
-• 容器名称: ${{ env.APP_NAME }}
-• 部署类型: ${{ github.event.inputs.type }}
-• 部署时间: $(date '+%Y-%m-%d %H:%M:%S')
-• 组织: ${{ env.ORG }}
-• 空间: ${{ env.SPACE }}
-
-🌐 节点配置：
-• 地址: $ROUTE
-• 端口: 443
-• 传输协议: tls
-• 网络: ws 或 tcp
-• 路径: /
-• 主机名: $ROUTE
-• SNI: $ROUTE
-
-💡 使用说明：
-• 将此地址添加到代理客户端配置中
-• 选择对应的传输协议和网络类型
-• 确保TLS/SSL设置正确
-• 测试连接是否正常
-
-✅ 节点部署成功！现在可以使用此节点进行网络代理。
-📅 下次资源释放时间：明天早上8:20-9:00"
-
-        curl -s -X POST "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
-          -d "chat_id=${{ secrets.CHAT_ID }}" \
-          -d "text=$SUCCESS_MESSAGE" \
-          -d "parse_mode=HTML" || echo "Telegram通知发送失败"
+        # 记录成功信息
+        echo "🎉 SAP节点部署成功！"
+        echo "📋 部署信息："
+        echo "• 容器名称: ${{ env.APP_NAME }}"
+        echo "• 部署类型: ${{ github.event.inputs.type }}"
+        echo "• 部署时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "• 组织: ${{ env.ORG }}"
+        echo "• 空间: ${{ env.SPACE }}"
+        echo "🌐 节点配置："
+        echo "• 地址: $ROUTE"
+        echo "• 端口: 443"
+        echo "• 传输协议: tls"
+        echo "• 网络: ws 或 tcp"
+        echo "• 路径: /"
+        echo "• 主机名: $ROUTE"
+        echo "• SNI: $ROUTE"
+        echo "💡 使用说明："
+        echo "• 将此地址添加到代理客户端配置中"
+        echo "• 选择对应的传输协议和网络类型"
+        echo "• 确保TLS/SSL设置正确"
+        echo "• 测试连接是否正常"
+        echo "✅ 节点部署成功！现在可以使用此节点进行网络代理。"
+        echo "📅 下次资源释放时间：明天早上8:20-9:00"
