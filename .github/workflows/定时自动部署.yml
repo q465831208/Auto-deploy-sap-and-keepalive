@@ -2,8 +2,10 @@ name: 定时自动部署SAP节点
 
 on:
   schedule:
-    # 每天8点25分自动运行 (UTC时间，北京时间8:25)
+    # 每天7点25分自动运行 (UTC时间23:25，北京时间7:25)
     - cron: '25 23 * * *'
+    # 每天8点25分自动运行 (UTC时间0:25，北京时间8:25)
+    - cron: '25 0 * * *'
   workflow_dispatch:
     inputs:
       type:
@@ -153,32 +155,37 @@ jobs:
       run: |
         echo "🚀 开始部署节点到容器: ${{ env.APP_NAME }}"
         
-        # 检查容器是否存在
+        # 检查容器是否存在且正在运行
         if cf app ${{ env.APP_NAME }} >/dev/null 2>&1; then
-          echo "✅ 容器 ${{ env.APP_NAME }} 存在，开始部署节点..."
-          
-          # 先停止应用以释放资源
-          echo "🔄 停止现有应用以释放资源..."
-          cf stop ${{ env.APP_NAME }} || echo "应用已停止或不存在"
-          
-          # 等待一下确保资源释放
-          sleep 10
-          
-          # 直接尝试部署，不等待资源
-          echo "🔧 尝试部署节点..."
-          
-          if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
-            echo "🎉 部署成功！节点部署完成"
+          # 检查应用状态
+          APP_STATUS=$(cf app ${{ env.APP_NAME }} | grep "requested state" | awk '{print $3}')
+          if [ "$APP_STATUS" = "started" ]; then
+            echo "✅ 容器 ${{ env.APP_NAME }} 已存在且正在运行，跳过部署"
+            echo "🎉 节点已部署完成，无需重复部署"
             exit 0
           else
-            echo "❌ 部署失败：资源不足"
-            echo "💡 建议："
-            echo "  1. 等待明天早上8:20-9:00资源释放时间段"
-            echo "  2. 检查是否有其他应用占用资源"
-            exit 1
+            echo "⚠️ 容器 ${{ env.APP_NAME }} 存在但未运行，重新部署..."
+            # 先停止应用以释放资源
+            echo "🔄 停止现有应用以释放资源..."
+            cf stop ${{ env.APP_NAME }} || echo "应用已停止或不存在"
+            # 等待一下确保资源释放
+            sleep 10
           fi
         else
-          echo "❌ 容器 ${{ env.APP_NAME }} 不存在，请检查容器名称"
+          echo "⚠️ 容器 ${{ env.APP_NAME }} 不存在，将自动创建新容器..."
+        fi
+        
+        # 直接尝试部署，不等待资源
+        echo "🔧 尝试部署节点..."
+        
+        if cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m 512M -k 256M --health-check-type port; then
+          echo "🎉 部署成功！节点部署完成"
+          exit 0
+        else
+          echo "❌ 部署失败：资源不足"
+          echo "💡 建议："
+          echo "  1. 等待明天早上8:20-9:00资源释放时间段"
+          echo "  2. 检查是否有其他应用占用资源"
           exit 1
         fi
         
