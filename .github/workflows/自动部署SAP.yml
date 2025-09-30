@@ -62,7 +62,7 @@ on:
         default: ''
 
 env:
-  MEMORY: 256M
+  MEMORY: 1024M
 
 jobs:
   deploy-app:
@@ -88,134 +88,199 @@ jobs:
         REGION="${{ github.event.inputs.region || 'US(free)' }}"
         TYPE="${{ github.event.inputs.type || 'Argo隧道CDN' }}"
         
+        # 自动运行时使用固定应用名称
+        if [ "${{ github.event_name }}" = "schedule" ]; then
+          echo "APP_NAME=123" >> $GITHUB_ENV
+        fi
+        
         case "$REGION" in
           # 免费区域
           "SG(free)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=free-sg$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=free-sg$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "US(free)")
             echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=free-us$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=free-us$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           # AWS 区域
           "AWS-AU(Sydney)")
             echo "CF_API=https://api.cf.ap10.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-au$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-au$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-BR(São Paulo)")
             echo "CF_API=https://api.cf.br10.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-br$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-br$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-KR(Seoul)")
             echo "CF_API=https://api.cf.ap12.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-kr$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-kr$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-CA(Montreal)")
             echo "CF_API=https://api.cf.ca10.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-ca$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-ca$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-US(VA)")
             echo "CF_API=https://api.cf.us10-001.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-usva$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-usva$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-US(OR)")
             echo "CF_API=https://api.cf.us11.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-usor$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-usor$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-EU(Frankfurt)")
             echo "CF_API=https://api.cf.eu10-005.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-eu$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-eu$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp10.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-jp$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-jp$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "AWS-SG(Singapore)")
             echo "CF_API=https://api.cf.ap11.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=aws-sg$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=aws-sg$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           
           # GCP 区域
           "GCP-AU(Sydney)")
             echo "CF_API=https://api.cf.ap30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-au$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-au$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-BR(São Paulo)")
             echo "CF_API=https://api.cf.br30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-br$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-br$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-US(IA)")
             echo "CF_API=https://api.cf.us30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-us$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-us$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-EU(Frankfurt)")
             echo "CF_API=https://api.cf.eu30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-eu$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-eu$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-JP(Osaka)")
             echo "CF_API=https://api.cf.jp30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-jpo$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-jpo$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp31.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-jpt$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-jpt$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-IL(Tel Aviv)")
             echo "CF_API=https://api.cf.il30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-il$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-il$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-IN(Mumbai)")
             echo "CF_API=https://api.cf.in30.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-in$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-in$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "GCP-KSA(Dammam)")
             echo "CF_API=https://api.cf.sa31.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=gcp-sa$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=gcp-sa$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           
           # Azure 区域
           "Azure-AU(Sydney)")
             echo "CF_API=https://api.cf.ap20.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-au$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-au$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-BR(São Paulo)")
             echo "CF_API=https://api.cf.br20.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-br$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-br$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-CA(Montreal)")
             echo "CF_API=https://api.cf.ca20.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-ca$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-ca$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-US(VA)")
             echo "CF_API=https://api.cf.us21.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-va$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-va$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-US(WA)")
             echo "CF_API=https://api.cf.us20.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-wa$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-wa$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-EU(Netherlands)")
             echo "CF_API=https://api.cf.eu20-001.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-eu$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-eu$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-JP(Tokyo)")
             echo "CF_API=https://api.cf.jp20.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-jp$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-jp$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Azure-SG(Singapore)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=az-sg$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=az-sg$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           
           # SAP Neo 区域
           "Neo-UAE(Dubai)")
             echo "CF_API=https://api.cf.neo-ae1.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=neo-uae$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=neo-uae$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
           "Neo-KSA(Riyadh)")
             echo "CF_API=https://api.cf.neo-sa1.hana.ondemand.com" >> $GITHUB_ENV
-            echo "APP_NAME=neo-ksa$RANDOM_STR" >> $GITHUB_ENV
+            if [ "${{ github.event_name }}" != "schedule" ]; then
+              echo "APP_NAME=neo-ksa$RANDOM_STR" >> $GITHUB_ENV
+            fi
             ;;
         esac
         
