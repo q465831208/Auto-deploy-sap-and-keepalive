@@ -1,7 +1,10 @@
 name: 自动部署 SAP
 
 on:
-  workflow_dispatch:  # 只允许手动触发
+  schedule:
+    # 每天北京时间上午8点自动运行
+    - cron: '50 23 * * *'
+  workflow_dispatch:  # 保留手动触发选项
     inputs:
       type:
         description: '选择部署的节点类型'
@@ -81,7 +84,11 @@ jobs:
         # 设置API端点和生成随机字符串
         RANDOM_STR=$(head /dev/urandom | tr -dc 'a-z' | head -c 6)
         
-        case "${{ github.event.inputs.region }}" in
+        # 设置默认值（自动运行时使用）
+        REGION="${{ github.event.inputs.region || 'US(free)' }}"
+        TYPE="${{ github.event.inputs.type || 'Argo隧道CDN' }}"
+        
+        case "$REGION" in
           # 免费区域
           "SG(free)")
             echo "CF_API=https://api.cf.ap21.hana.ondemand.com" >> $GITHUB_ENV
@@ -221,9 +228,9 @@ jobs:
         if [[ -n "${{ secrets.DOCKER_IMAGE }}" ]]; then
           echo "DOCKER_IMAGE=${{ secrets.DOCKER_IMAGE }}" >> $GITHUB_ENV
         else
-          if [ "${{ github.event.inputs.type }}" = "ws直连" ]; then
+          if [ "$TYPE" = "ws直连" ]; then
             echo "DOCKER_IMAGE=ghcr.io/eooce/ws:latest" >> $GITHUB_ENV
-          elif [ "${{ github.event.inputs.type }}" = "xhttp直连" ]; then
+          elif [ "$TYPE" = "xhttp直连" ]; then
             echo "DOCKER_IMAGE=ghcr.io/eooce/goxhttp:latest" >> $GITHUB_ENV
           else 
             echo "DOCKER_IMAGE=ghcr.io/eooce/nodejs:main" >> $GITHUB_ENV
@@ -265,16 +272,17 @@ jobs:
       run: |
         # 基础环境变量
         cf set-env ${{ env.APP_NAME }} NAME "SAP"
-        cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
+        cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID || '3b86aec3-88fd-4cbe-9a68-f222d5df60d3' }}"
         cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER }}"
         cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT }}"
         cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY }}"
         cf set-env ${{ env.APP_NAME }} ARGO_PORT "${{ secrets.ARGO_PORT }}"
-        cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN }}"
-        cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH }}"
-        cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN || 'xjp-spa.daili123.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH || 'eyJhIjoiYWViZTE2OGY2YmM2NmFhZThmMDcwNjY2ZWVkYmJiZDIiLCJ0IjoiMmY2MWZhNWYtZTJkMS00YzhiLWJmYWYtMTcwMTBkMTA1OTU3IiwicyI6Ik16RXpNVEJsWldNdFltVTRaUzAwTmpSakxXSXpaVGd0WmpZeU5tTXpPVGMyTlRreSJ9' }}"
+        cf set-env ${{ env.APP_NAME }} ARGO_TUNNEL_ID "${{ secrets.ARGO_TUNNEL_ID || '2f61fa5f-e2d1-4c8b-bfaf-17010d105957' }}"
+        cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH || '123' }}"
         cf set-env ${{ env.APP_NAME }} CFIP "${{ secrets.CFIP || 'cf.877774.xyz' }}"
-        cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT }}"
+        cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT || '' }}"
         cf set-env ${{ env.APP_NAME }} CHAT_ID "${{ secrets.CHAT_ID }}"
         cf set-env ${{ env.APP_NAME }} BOT_TOKEN "${{ secrets.BOT_TOKEN }}"
 
@@ -312,7 +320,8 @@ jobs:
     - name: 详细部署信息
       run: |
         echo "🚀 部署完成！详细信息如下："
-        echo "区域(Region): ${{ github.event.inputs.region }}"
+        echo "区域(Region): ${{ github.event.inputs.region || 'US(free)' }}"
+        echo "部署类型(Type): ${{ github.event.inputs.type || 'Argo隧道CDN' }}"
         echo "组织(ORG): ${{ env.ORG }}"
         echo "空间(SPACE): ${{ env.SPACE }}"
         echo "应用名称(App Name): ${{ env.APP_NAME }}"
