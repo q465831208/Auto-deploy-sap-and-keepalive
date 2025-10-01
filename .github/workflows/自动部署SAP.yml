@@ -2,8 +2,8 @@ name: 自动部署 SAP
 
 on:
   schedule:
-    # 每天北京时间上午8点自动运行
-    - cron: '50 23 * * *'
+    # 
+    - cron: 58 23 * * *'
   workflow_dispatch:  # 保留手动触发选项
     inputs:
       type:
