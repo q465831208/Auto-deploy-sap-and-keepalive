@@ -2,8 +2,8 @@ name: 自动部署 SAP
 
 on:
   schedule:
-    # 
-    - cron: '58 23 * * *'
+    # 每天北京时间上午8点20分自动运行
+    - cron: '20 0 * * *'
   workflow_dispatch:  # 保留手动触发选项
     inputs:
       type:
@@ -131,9 +131,9 @@ jobs:
         # 基础环境变量
         cf set-env ${{ env.APP_NAME }} NAME "SAP"
         cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID || '3b86aec3-88fd-4cbe-9a68-f222d5df60d3' }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER || 'agent.ylm52.dpdns.org' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT || '80' }}"
+        cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY || 'I9Vxqc2g2rfY4Qqcv5guQ5B8vVHncTsh' }}"
         cf set-env ${{ env.APP_NAME }} ARGO_PORT "${{ secrets.ARGO_PORT }}"
         cf set-env ${{ env.APP_NAME }} ARGO_DOMAIN "${{ secrets.ARGO_DOMAIN || 'xjp-spa.daili123.dpdns.org' }}"
         cf set-env ${{ env.APP_NAME }} ARGO_AUTH "${{ secrets.ARGO_AUTH || 'eyJhIjoiYWViZTE2OGY2YmM2NmFhZThmMDcwNjY2ZWVkYmJiZDIiLCJ0IjoiMmY2MWZhNWYtZTJkMS00YzhiLWJmYWYtMTcwMTBkMTA1OTU3IiwicyI6Ik16RXpNVEJsWldNdFltVTRaUzAwTmpSakxXSXpaVGd0WmpZeU5tTXpPVGMyTlRreSJ9' }}"
