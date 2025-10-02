@@ -56,9 +56,9 @@ jobs:
         REGION="${{ github.event.inputs.region || 'US(free)' }}"
         TYPE="${{ github.event.inputs.type || 'Argo隧道CDN' }}"
         
-        # 自动运行时使用固定应用名称
+        # 自动运行时使用随机应用名称
         if [ "${{ github.event_name }}" = "schedule" ]; then
-          echo "APP_NAME=123" >> $GITHUB_ENV
+          echo "APP_NAME=ls-$RANDOM_STR" >> $GITHUB_ENV
         fi
         
         case "$REGION" in
