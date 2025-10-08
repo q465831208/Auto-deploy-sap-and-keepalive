@@ -30,7 +30,7 @@ on:
         default: ''
 
 env:
-  MEMORY: 1024M
+  MEMORY: 512M
 
 jobs:
   deploy-app:
